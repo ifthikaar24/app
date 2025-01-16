@@ -84,4 +84,6 @@ def get_actions():
     return jsonify(actions)
 
 if __name__ == "__main__":
-    app.run(debug=True, port=5000)
+    # Fetch the PORT from environment variables, default to 5000 for local development
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
