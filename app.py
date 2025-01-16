@@ -12,7 +12,7 @@ app = Flask(__name__)
 CORS(app)
 
 # MongoDB connection
-client = MongoClient("mongodb+srv://your-connection-string")
+client = MongoClient("mongodb+srv://ifthikaar:<taaeif10>@github-webhooks.lugoq.mongodb.net/?retryWrites=true&w=majority&appName=github-webhooks")
 db = client['github_webhooks']
 collection = db['actions']
 
