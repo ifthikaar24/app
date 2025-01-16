@@ -1,4 +1,4 @@
-Flask==3.1.0
-Flask-CORS==3.1.1
-pymongo==4.10.1
+Flask
+Flask-CORS
+pymongo
 
