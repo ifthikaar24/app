@@ -1,5 +1,5 @@
 from flask import Flask, request, jsonify
-from flask_cors import CORS
+from flask_cors import CORS  # Import CORS
 from pymongo import MongoClient
 import hashlib
 import hmac
@@ -7,27 +7,31 @@ import datetime
 import os
 
 app = Flask(__name__)
-CORS(app)  # Enable CORS for all origins
+
+# Enable CORS for all routes
+CORS(app)
 
 # MongoDB connection
-client = MongoClient("mongodb+srv://ifthikaar:<taaeif10>@github-webhooks.lugoq.mongodb.net/?retryWrites=true&w=majority&appName=github-webhooks")
+client = MongoClient("mongodb+srv://your-connection-string")
 db = client['github_webhooks']
 collection = db['actions']
 
 # Secret for webhook validation
-WEBHOOK_SECRET = "taaeif10"
+WEBHOOK_SECRET = "your-webhook-secret"
 
 # Webhook receiver endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    # Log the incoming request for debugging
     app.logger.info(f"Received a POST request to /webhook with data: {request.data}")
     
     # Validate the GitHub webhook
     signature = request.headers.get('X-Hub-Signature-256')
     if not validate_signature(request.data, signature):
         app.logger.warning(f"Invalid signature received: {signature}")
-        return jsonify({"error": "Invalid signature"}), 401
+        return "Invalid signature", 401
 
+    # Parse the webhook payload
     payload = request.json
     app.logger.info(f"Parsed payload: {payload}")
 
@@ -36,8 +40,7 @@ def webhook():
     repo = payload.get('repository', {}).get('name')
     timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
 
-    # Handle GitHub actions
-    entry = None
+    # Handle different actions
     if action_type == "push":
         to_branch = payload.get('ref', '').replace('refs/heads/', '')
         entry = {
@@ -71,18 +74,13 @@ def webhook():
             "timestamp": timestamp
         }
     else:
-        app.logger.info("No actionable event type received.")
-        return jsonify({"message": "No action handled"}), 200
+        return "No action handled", 200
 
-    # Store entry in MongoDB
-    if entry:
-        collection.insert_one(entry)
-        app.logger.info(f"Stored entry: {entry}")
-
-    return jsonify({"message": "Event processed"}), 200
+    # Store the entry in MongoDB
+    collection.insert_one(entry)
+    return "Event processed", 200
 
 def validate_signature(payload, signature):
-    """Validate the HMAC signature."""
     if not signature:
         return False
     computed_hash = hmac.new(WEBHOOK_SECRET.encode(), payload, hashlib.sha256).hexdigest()
@@ -90,12 +88,20 @@ def validate_signature(payload, signature):
 
 @app.route('/actions', methods=['GET'])
 def get_actions():
+    # Log the incoming GET request
     app.logger.info("Received a GET request to /actions")
+
+    # Fetch latest actions from MongoDB
     actions = list(collection.find().sort("timestamp", -1))
     for action in actions:
         action["_id"] = str(action["_id"])  # Convert ObjectId to string
+    
+    # Log actions fetched from DB
     app.logger.info(f"Fetched actions: {actions}")
+    
     return jsonify(actions)
 
 if __name__ == "__main__":
+    # Fetch the PORT from environment variables, default to 5000 for local development
     port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=True)
