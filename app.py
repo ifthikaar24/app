@@ -18,13 +18,19 @@ WEBHOOK_SECRET = "taaeif10"
 # Webhook receiver endpoint
 @app.route('/webhook', methods=['POST'])
 def webhook():
+    # Log the incoming request for debugging
+    app.logger.info(f"Received a POST request to /webhook with data: {request.data}")
+    
     # Validate the GitHub webhook
     signature = request.headers.get('X-Hub-Signature-256')
     if not validate_signature(request.data, signature):
+        app.logger.warning(f"Invalid signature received: {signature}")
         return "Invalid signature", 401
 
     # Parse the webhook payload
     payload = request.json
+    app.logger.info(f"Parsed payload: {payload}")
+
     action_type = payload.get('action')
     author = payload.get('sender', {}).get('login')
     repo = payload.get('repository', {}).get('name')
@@ -78,10 +84,17 @@ def validate_signature(payload, signature):
 
 @app.route('/actions', methods=['GET'])
 def get_actions():
+    # Log the incoming GET request
+    app.logger.info("Received a GET request to /actions")
+
     # Fetch latest actions from MongoDB
     actions = list(collection.find().sort("timestamp", -1))
     for action in actions:
         action["_id"] = str(action["_id"])  # Convert ObjectId to string
+    
+    # Log actions fetched from DB
+    app.logger.info(f"Fetched actions: {actions}")
+    
     return jsonify(actions)
 
 if __name__ == "__main__":
