@@ -1,0 +1,87 @@
+from flask import Flask, request, jsonify
+from pymongo import MongoClient
+import hashlib
+import hmac
+import datetime
+
+app = Flask(__name__)
+
+# MongoDB connection
+client = MongoClient("mongodb+srv://ifthikaar:<taaeif10>@github-webhooks.lugoq.mongodb.net/?retryWrites=true&w=majority&appName=github-webhooks")
+db = client['github_webhooks']
+collection = db['actions']
+
+# Secret for webhook validation
+WEBHOOK_SECRET = "taaeif10"
+
+# Webhook receiver endpoint
+@app.route('/webhook', methods=['POST'])
+def webhook():
+    # Validate the GitHub webhook
+    signature = request.headers.get('X-Hub-Signature-256')
+    if not validate_signature(request.data, signature):
+        return "Invalid signature", 401
+
+    # Parse the webhook payload
+    payload = request.json
+    action_type = payload.get('action')
+    author = payload.get('sender', {}).get('login')
+    repo = payload.get('repository', {}).get('name')
+    timestamp = datetime.datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')
+
+    # Handle different actions
+    if action_type == "push":
+        to_branch = payload.get('ref', '').replace('refs/heads/', '')
+        entry = {
+            "request_id": payload.get('after'),
+            "author": author,
+            "action": "PUSH",
+            "from_branch": None,
+            "to_branch": to_branch,
+            "timestamp": timestamp
+        }
+    elif action_type == "pull_request":
+        from_branch = payload.get('pull_request', {}).get('head', {}).get('ref')
+        to_branch = payload.get('pull_request', {}).get('base', {}).get('ref')
+        entry = {
+            "request_id": str(payload.get('pull_request', {}).get('id')),
+            "author": author,
+            "action": "PULL_REQUEST",
+            "from_branch": from_branch,
+            "to_branch": to_branch,
+            "timestamp": timestamp
+        }
+    elif action_type == "closed" and payload.get('pull_request', {}).get('merged', False):
+        from_branch = payload.get('pull_request', {}).get('head', {}).get('ref')
+        to_branch = payload.get('pull_request', {}).get('base', {}).get('ref')
+        entry = {
+            "request_id": str(payload.get('pull_request', {}).get('id')),
+            "author": author,
+            "action": "MERGE",
+            "from_branch": from_branch,
+            "to_branch": to_branch,
+            "timestamp": timestamp
+        }
+    else:
+        return "No action handled", 200
+
+    # Store the entry in MongoDB
+    collection.insert_one(entry)
+    return "Event processed", 200
+
+def validate_signature(payload, signature):
+    if not signature:
+        return False
+    computed_hash = hmac.new(WEBHOOK_SECRET.encode(), payload, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(f"sha256={computed_hash}", signature)
+
+@app.route('/actions', methods=['GET'])
+def get_actions():
+    # Fetch latest actions from MongoDB
+    actions = list(collection.find().sort("timestamp", -1))
+    for action in actions:
+        action["_id"] = str(action["_id"])  # Convert ObjectId to string
+    return jsonify(actions)
+
+if __name__ == "__main__":
+    app.run(debug=True, port=5000)
